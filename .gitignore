@@ -1,0 +1,14 @@
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
+.env
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# PlatformIO build output
+.pio/

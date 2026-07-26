@@ -8,7 +8,7 @@ Once Tyto works reliably on its own, it may integrate with [APEX](https://github
 
 ## Current Status
 
-Planning and hardware setup.
+ESP32-S3 hardware bring-up complete. Preparing environmental sensor integration.
 
 ## Roadmap
 

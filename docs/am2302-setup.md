@@ -36,7 +36,7 @@ The firmware uses the Adafruit DHT sensor library. It is declared in
 ```ini
 lib_deps =
     adafruit/DHT sensor library
-````
+```
 
 The AM2302 is configured as `DHT22` because that is the sensor-family
 identifier used by the library.

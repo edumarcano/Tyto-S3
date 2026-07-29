@@ -12,7 +12,12 @@ Tyto is designed to remain useful without cloud services or another application.
 
 ## Current Status
 
-ESP32-S3 hardware bring-up complete. Preparing environmental sensor integration.
+Environmental sensing is complete for v0.2.0. Tyto reads temperature
+and relative humidity from an AM2302, validates the measurements, and
+reports structured sensor status through serial output.
+
+See [AM2302 Sensor Setup](docs/am2302-setup.md) for the wiring and
+verification instructions.
 
 ## Roadmap
 

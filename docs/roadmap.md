@@ -13,6 +13,8 @@ Tyto is developed in small stages. Each release should leave the device working 
 
 ## v0.2.0 — Environmental sensing
 
+**Status: Complete**
+
 - Connect the temperature and humidity sensor
 - Read temperature and relative humidity
 - Validate sensor readings

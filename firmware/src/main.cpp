@@ -4,11 +4,11 @@
 namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
-constexpr uint32_t kHeartbeatIntervalMs = 2000;
-constexpr uint8_t kDhtDatapin = 4;
+constexpr uint32_t kMeasurementIntervalMs = 5000;
+constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
 
-DHT climatesensor(kDhtDatapin, kDhtType);
+DHT climateSensor(kDhtDataPin, kDhtType);
 
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
@@ -73,22 +73,33 @@ void setup() {
 
     printBoardInformation();
 
-        Serial.printf(
+    climateSensor.begin();
+
+    Serial.printf(
         "AM2302 driver started on GPIO %u. \n",
-        static_cast<unsigned>(kDhtDatapin)
+        static_cast<unsigned>(kDhtDataPin)
     );
 }
 
 void loop() {
-    static uint32_t heartbeat = 0;
+    const float relativeHumidityPercent = climateSensor.readHumidity();
+    const float temperatureC = climateSensor.readTemperature();
 
-    ++heartbeat;
+    if (isnan(relativeHumidityPercent) || isnan(temperatureC)) {
+        Serial.printf(
+            "AM2302 read failed | uptime: %lu seconds\n",
+            static_cast<unsigned long>(millis() / 1000UL)
+        );
+    } else {
+        Serial.printf(
+            "Tyto environment | uptime: %lu seconds"
+            " | temperature: %.1f C"
+            " | relative humidity: %.1f %%\n",
+            static_cast<unsigned long>(millis() / 1000UL),
+            static_cast<double>(temperatureC),
+            static_cast<double>(relativeHumidityPercent)
+        );
+    }
 
-    Serial.printf(
-        "Tyto alive | uptime: %lu seconds | heartbeat: %lu\n",
-        static_cast<unsigned long>(millis() / 1000UL),
-        static_cast<unsigned long>(heartbeat)
-    );
-
-    delay(kHeartbeatIntervalMs);
+    delay(kMeasurementIntervalMs);
 }

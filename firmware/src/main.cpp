@@ -8,7 +8,24 @@ constexpr uint32_t kMeasurementIntervalMs = 5000;
 constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
 
+constexpr float kMinimumTemperatureC = -40.0F;
+constexpr float kMaximumTemperatureC = 80.0F;
+constexpr float kMinimumRelativeHumidityPercent = 0.0F;
+constexpr float kMaximumRelativeHumidityPercent = 100.0F;
+
 DHT climateSensor(kDhtDataPin, kDhtType);
+
+bool isMeasurementInRange(
+    const float temperatureC,
+    const float relativeHumidityPercent
+) {
+    return temperatureC >= kMinimumTemperatureC &&
+           temperatureC <= kMaximumTemperatureC &&
+           relativeHumidityPercent >=
+               kMinimumRelativeHumidityPercent &&
+           relativeHumidityPercent <=
+               kMaximumRelativeHumidityPercent;
+}
 
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
@@ -76,26 +93,49 @@ void setup() {
     climateSensor.begin();
 
     Serial.printf(
-        "AM2302 driver started on GPIO %u. \n",
+        "TYTO_SENSOR uptime_ms=%lu sensor=am2302"
+        " state=driver_started gpio=%u\n",
+        static_cast<unsigned long>(millis()),
         static_cast<unsigned>(kDhtDataPin)
     );
 }
 
 void loop() {
-    const float relativeHumidityPercent = climateSensor.readHumidity();
-    const float temperatureC = climateSensor.readTemperature();
+    const float relativeHumidityPercent =
+        climateSensor.readHumidity();
+    const float temperatureC =
+        climateSensor.readTemperature();
 
-    if (isnan(relativeHumidityPercent) || isnan(temperatureC)) {
+    const unsigned long uptimeMs =
+        static_cast<unsigned long>(millis());
+
+    if (isnan(relativeHumidityPercent) ||
+        isnan(temperatureC)) {
         Serial.printf(
-            "AM2302 read failed | uptime: %lu seconds\n",
-            static_cast<unsigned long>(millis() / 1000UL)
+            "TYTO_ENV uptime_ms=%lu sensor=am2302"
+            " status=read_error\n",
+            uptimeMs
+        );
+    } else if (!isMeasurementInRange(
+                   temperatureC,
+                   relativeHumidityPercent
+               )) {
+        Serial.printf(
+            "TYTO_ENV uptime_ms=%lu sensor=am2302"
+            " status=invalid_data"
+            " temperature_c=%.1f"
+            " relative_humidity_percent=%.1f\n",
+            uptimeMs,
+            static_cast<double>(temperatureC),
+            static_cast<double>(relativeHumidityPercent)
         );
     } else {
         Serial.printf(
-            "Tyto environment | uptime: %lu seconds"
-            " | temperature: %.1f C"
-            " | relative humidity: %.1f %%\n",
-            static_cast<unsigned long>(millis() / 1000UL),
+            "TYTO_ENV uptime_ms=%lu sensor=am2302"
+            " status=ok"
+            " temperature_c=%.1f"
+            " relative_humidity_percent=%.1f\n",
+            uptimeMs,
             static_cast<double>(temperatureC),
             static_cast<double>(relativeHumidityPercent)
         );

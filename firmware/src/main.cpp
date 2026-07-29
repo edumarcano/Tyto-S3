@@ -1,9 +1,14 @@
 #include <Arduino.h>
+#include <DHT.h>
 
 namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
 constexpr uint32_t kHeartbeatIntervalMs = 2000;
+constexpr uint8_t kDhtDatapin = 4;
+constexpr uint8_t kDhtType = DHT22;
+
+DHT climatesensor(kDhtDatapin, kDhtType);
 
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
@@ -67,6 +72,11 @@ void setup() {
     delay(2000);
 
     printBoardInformation();
+
+        Serial.printf(
+        "AM2302 driver started on GPIO %u. \n",
+        static_cast<unsigned>(kDhtDatapin)
+    );
 }
 
 void loop() {

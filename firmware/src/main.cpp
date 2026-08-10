@@ -8,6 +8,13 @@ constexpr uint32_t kMeasurementIntervalMs = 5000;
 constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
 
+// Compare averages of the oldest and newest three samples in a
+// six-sample window. At the current 5 s sampling interval, the
+// window spans about 25 s. The 0.2 C threshold is provisional
+// and is intended only for basic trend reporting.
+constexpr size_t kTemperatureTrendSampleCount = 6;
+constexpr float kTemperatureTrendThresholdC = 0.2F;
+
 constexpr float kMinimumTemperatureC = -40.0F;
 constexpr float kMaximumTemperatureC = 80.0F;
 constexpr float kMinimumRelativeHumidityPercent = 0.0F;
@@ -16,6 +23,9 @@ constexpr float kMaximumRelativeHumidityPercent = 100.0F;
 DHT climateSensor(kDhtDataPin, kDhtType);
 
 uint32_t lastMeasurementMs = 0;
+
+float recentTemperaturesC[kTemperatureTrendSampleCount] = {};
+size_t temperatureSampleCount = 0;
 
 bool isMeasurementInRange(
     const float temperatureC,
@@ -29,7 +39,7 @@ bool isMeasurementInRange(
                kMaximumRelativeHumidityPercent;
 }
 
-// Calculate dew point using the Magnus approximation.
+// Calculate dew point using the Magnus approximation
 // with constants a = 17.62 and b = 243.12 C.
 float calculateDewPointC(
     const float temperatureC,
@@ -49,6 +59,48 @@ float calculateDewPointC(
 
     return (kMagnusB * gamma) /
            (kMagnusA - gamma);
+}
+
+void addTemperatureSample(const float temperatureC) {
+    if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+        recentTemperaturesC[temperatureSampleCount] = temperatureC;
+        ++temperatureSampleCount;
+        return;
+    }
+
+    for (size_t i = 1; i < kTemperatureTrendSampleCount; ++i) {
+        recentTemperaturesC[i - 1] = recentTemperaturesC[i];
+    }
+
+    recentTemperaturesC[kTemperatureTrendSampleCount - 1] =
+        temperatureC;
+}
+
+float calculateTemperatureTrendChangeC() {
+    float olderTotalC = 0.0F;
+    float newerTotalC = 0.0F;
+
+    for (size_t i = 0; i < 3; ++i) {
+        olderTotalC += recentTemperaturesC[i];
+        newerTotalC += recentTemperaturesC[i + 3];
+    }
+
+    const float olderAverageC = olderTotalC / 3.0F;
+    const float newerAverageC = newerTotalC / 3.0F;
+
+    return newerAverageC - olderAverageC;
+}
+
+const char* getTemperatureTrend(const float temperatureChangeC) {
+    if (temperatureChangeC <= -kTemperatureTrendThresholdC) {
+        return "cooling";
+    }
+
+    if (temperatureChangeC >= kTemperatureTrendThresholdC) {
+        return "warming";
+    }
+
+    return "stable";
 }
 
 void printBoardInformation() {
@@ -165,22 +217,49 @@ void loop() {
             static_cast<double>(relativeHumidityPercent)
         );
     } else {
-        const float dewPointC =
-        calculateDewPointC(
-            temperatureC,
-            relativeHumidityPercent
-        );
+        addTemperatureSample(temperatureC);
 
-        Serial.printf(
-            "TYTO_ENV uptime_ms=%lu sensor=am2302"
-            " status=ok"
-            " temperature_c=%.1f"
-            " relative_humidity_percent=%.1f"
-            " dew_point_c=%.1f\n",
-            uptimeMs,
-            static_cast<double>(temperatureC),
-            static_cast<double>(relativeHumidityPercent),
-            static_cast<double>(dewPointC)
-        );
+        const float dewPointC =
+            calculateDewPointC(
+                temperatureC,
+                relativeHumidityPercent
+            );
+
+        if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+            Serial.printf(
+                "TYTO_ENV uptime_ms=%lu sensor=am2302"
+                " status=ok"
+                " temperature_c=%.1f"
+                " relative_humidity_percent=%.1f"
+                " dew_point_c=%.1f"
+                " temperature_trend=collecting\n",
+                uptimeMs,
+                static_cast<double>(temperatureC),
+                static_cast<double>(relativeHumidityPercent),
+                static_cast<double>(dewPointC)
+            );
+        } else {
+            const float temperatureTrendChangeC =
+                calculateTemperatureTrendChangeC();
+
+            const char* temperatureTrend =
+                getTemperatureTrend(temperatureTrendChangeC);
+
+            Serial.printf(
+                "TYTO_ENV uptime_ms=%lu sensor=am2302"
+                " status=ok"
+                " temperature_c=%.1f"
+                " relative_humidity_percent=%.1f"
+                " dew_point_c=%.1f"
+                " temperature_trend=%s"
+                " temperature_change_c=%.2f\n",
+                uptimeMs,
+                static_cast<double>(temperatureC),
+                static_cast<double>(relativeHumidityPercent),
+                static_cast<double>(dewPointC),
+                temperatureTrend,
+                static_cast<double>(temperatureTrendChangeC)
+            );
+        }
     }
 }

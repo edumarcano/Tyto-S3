@@ -15,6 +15,8 @@ constexpr float kMaximumRelativeHumidityPercent = 100.0F;
 
 DHT climateSensor(kDhtDataPin, kDhtType);
 
+uint32_t lastMeasurementMs = 0;
+
 bool isMeasurementInRange(
     const float temperatureC,
     const float relativeHumidityPercent
@@ -94,20 +96,31 @@ void setup() {
 
     Serial.printf(
         "TYTO_SENSOR uptime_ms=%lu sensor=am2302"
-        " state=driver_started gpio=%u\n",
+        " state=driver_started gpio=%u"
+        " measurement_interval_ms=%lu\n",
         static_cast<unsigned long>(millis()),
-        static_cast<unsigned>(kDhtDataPin)
+        static_cast<unsigned>(kDhtDataPin),
+        static_cast<unsigned long>(kMeasurementIntervalMs)
     );
 }
 
 void loop() {
+
+    const uint32_t nowMs = millis();
+
+    if (nowMs - lastMeasurementMs < kMeasurementIntervalMs) {
+        return;
+    }
+
+    lastMeasurementMs = nowMs;
+
     const float relativeHumidityPercent =
         climateSensor.readHumidity();
     const float temperatureC =
         climateSensor.readTemperature();
 
     const unsigned long uptimeMs =
-        static_cast<unsigned long>(millis());
+        static_cast<unsigned long>(nowMs);
 
     if (isnan(relativeHumidityPercent) ||
         isnan(temperatureC)) {
@@ -140,6 +153,4 @@ void loop() {
             static_cast<double>(relativeHumidityPercent)
         );
     }
-
-    delay(kMeasurementIntervalMs);
 }

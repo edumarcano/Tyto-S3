@@ -29,6 +29,28 @@ bool isMeasurementInRange(
                kMaximumRelativeHumidityPercent;
 }
 
+// Calculate dew point using the Magnus approximation.
+// with constants a = 17.62 and b = 243.12 C.
+float calculateDewPointC(
+    const float temperatureC,
+    const float relativeHumidityPercent
+) {
+    if (relativeHumidityPercent <= 0.0F) {
+        return NAN;
+    }
+
+    constexpr float kMagnusA = 17.62F;
+    constexpr float kMagnusB = 243.12F;
+
+    const float gamma =
+        log(relativeHumidityPercent / 100.0F) +
+        (kMagnusA * temperatureC) /
+            (kMagnusB + temperatureC);
+
+    return (kMagnusB * gamma) /
+           (kMagnusA - gamma);
+}
+
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
 
@@ -143,14 +165,22 @@ void loop() {
             static_cast<double>(relativeHumidityPercent)
         );
     } else {
+        const float dewPointC =
+        calculateDewPointC(
+            temperatureC,
+            relativeHumidityPercent
+        );
+
         Serial.printf(
             "TYTO_ENV uptime_ms=%lu sensor=am2302"
             " status=ok"
             " temperature_c=%.1f"
-            " relative_humidity_percent=%.1f\n",
+            " relative_humidity_percent=%.1f"
+            " dew_point_c=%.1f\n",
             uptimeMs,
             static_cast<double>(temperatureC),
-            static_cast<double>(relativeHumidityPercent)
+            static_cast<double>(relativeHumidityPercent),
+            static_cast<double>(dewPointC)
         );
     }
 }

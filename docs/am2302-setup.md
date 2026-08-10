@@ -1,6 +1,6 @@
 # AM2302 Sensor Setup
 
-Tyto v0.2.0 uses a three-pin ASAIR AM2302 temperature and
+Tyto v0.3.0 uses a three-pin ASAIR AM2302 temperature and
 relative-humidity module.
 
 ## Hardware
@@ -51,49 +51,80 @@ identifier used by the library.
 
 ## Serial output
 
-The sensor driver reports its startup state:
+The sensor driver reports its startup state and configured measurement
+interval:
 
 ```text
-TYTO_SENSOR uptime_ms=2000 sensor=am2302 state=driver_started gpio=4
+TYTO_SENSOR uptime_ms=2125 sensor=am2302 state=driver_started gpio=4 measurement_interval_ms=5000
 ```
 
-A valid measurement uses this format:
+While the firmware is collecting enough valid readings for temperature
+trend analysis, a successful measurement uses this format:
 
 ```text
-TYTO_ENV uptime_ms=7000 sensor=am2302 status=ok temperature_c=28.5 relative_humidity_percent=41.2
+TYTO_ENV uptime_ms=5000 sensor=am2302 status=ok data_status=fresh temperature_c=28.2 relative_humidity_percent=43.3 dew_point_c=14.5 temperature_trend=collecting
 ```
 
-A communication failure uses:
+After enough valid readings have been collected, successful measurements
+also report the current temperature trend and the calculated temperature
+change across the recent comparison window:
 
 ```text
-TYTO_ENV uptime_ms=12000 sensor=am2302 status=read_error
+TYTO_ENV uptime_ms=30000 sensor=am2302 status=ok data_status=fresh temperature_c=28.1 relative_humidity_percent=43.3 dew_point_c=14.5 temperature_trend=stable temperature_change_c=-0.03
 ```
 
-A received measurement outside the accepted sensor range uses:
+The possible temperature-trend states are `warming`, `cooling`, `stable`,
+and `collecting`.
+
+If sensor communication fails before any valid measurement has been
+received, no usable environmental data is available:
 
 ```text
-TYTO_ENV uptime_ms=17000 sensor=am2302 status=invalid_data temperature_c=... relative_humidity_percent=...
+TYTO_ENV uptime_ms=5000 sensor=am2302 status=read_error data_status=unavailable
 ```
 
-Measurements are attempted every five seconds.
+If communication fails after a valid measurement has already been
+received, the previous valid values are preserved but clearly identified
+as stale:
+
+```text
+TYTO_ENV uptime_ms=35000 sensor=am2302 status=read_error data_status=stale last_valid_age_ms=5000 last_valid_temperature_c=28.1 last_valid_relative_humidity_percent=43.3 last_valid_dew_point_c=14.5
+```
+
+A received measurement outside the accepted sensor range is reported as
+`invalid_data`. If no previous valid measurement exists, its data status
+is `unavailable`. If a previous valid measurement exists, that retained
+measurement is reported separately as stale.
+
+Measurements are attempted every five seconds by default. The interval is
+configured in the firmware through `kMeasurementIntervalMs`.
 
 ## Validation behavior
 
-A measurement is reported as valid only when:
+A measurement is accepted as valid only when:
 
-- both sensor reads return finite values;
-- temperature is between -40 °C and 80 °C;
-- relative humidity is between 0% and 100%.
+* both sensor reads return finite values;
+* temperature is between -40 °C and 80 °C;
+* relative humidity is between 0% and 100%.
 
-Failed reads are reported rather than replaced with zero, an old
-measurement, or fabricated data. The firmware continues running and
-tries again at the next measurement interval.
+Dew point and temperature-trend history are updated only from valid
+measurements. Failed or invalid readings are not added to the trend
+history.
+
+When a read fails after a previous valid measurement, the firmware keeps
+the last valid temperature, relative humidity, and dew point in memory.
+Those values are reported with `last_valid_*` field names and
+`data_status=stale` so they are not presented as new measurements. The
+reported `last_valid_age_ms` value shows how long it has been since the
+last successful reading.
+
+The firmware continues running after sensor failures and attempts another
+measurement at the next configured interval. Normal fresh-data reporting
+resumes when valid sensor readings return.
+
 
 ## Current limitations
 
 - Calling the sensor driver's `begin()` method does not confirm that
   the physical sensor is present.
 - Sensor availability is confirmed only when a valid read succeeds.
-- v0.2.0 reports current temperature and relative humidity but does
-  not calculate dew point or trends.
-- The five-second measurement interval is fixed in the firmware.

@@ -24,12 +24,13 @@ Tyto is developed in small stages. Each release should leave the device working 
 
 ## v0.3.0 — Local climate monitoring
 
+**Status: Complete**
+
 - Sample measurements at a configurable interval
 - Calculate dew point
-- Track basic trends and rates of change
+- Track basic trends and temperature change over a recent window
 - Report sensor health and data quality
 - Separate sensing, validation, calculations, and reporting in the firmware
-- Continue operating without Wi-Fi or APEX
 
 ## v0.4.0 — History and configuration
 

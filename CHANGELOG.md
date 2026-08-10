@@ -1,10 +1,38 @@
-# Changelog
+# Tyto-S3 Changelog
 
-Notable changes to Tyto are documented here.
+---
+
+## v0.3.0 — Local climate monitoring
+
+**Released:** August 10, 2026
+
+### Added
+
+* Configurable environmental measurement interval with non-blocking
+  `millis()`-based scheduling
+* Startup reporting of the configured measurement interval
+* Dew-point calculation for valid temperature and relative-humidity readings
+* Basic temperature trend reporting using recent valid measurements
+* Warming, cooling, stable, and collecting trend states
+* Clear fresh, stale, and unavailable data-status reporting
+* Tracking and reporting of the age and values of the last valid measurement
+
+### Changed
+
+* Preserved the last valid environmental measurement when a new sensor read
+  fails without presenting the retained data as fresh
+* Kept failed and invalid readings out of temperature trend calculations
+* Reorganized climate-monitoring responsibilities to make timing,
+  validation, calculations, state tracking, and serial reporting easier
+  to understand
+* Updated the README and roadmap to reflect completion of local climate
+  monitoring
+
+---
 
 ## v0.2.0 — Environmental sensing
 
-Released: July 29, 2026
+**Released:** July 29, 2026
 
 ### Added
 
@@ -22,9 +50,11 @@ Released: July 29, 2026
 - Updated the README and roadmap to reflect completion of
   environmental sensing
 
+---
+
 ## v0.1.0 — ESP32-S3 bring-up
 
-Released: July 26, 2026
+**Released:** July 26, 2026
 
 ### Added
 

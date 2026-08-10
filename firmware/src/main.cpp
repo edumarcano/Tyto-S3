@@ -8,12 +8,31 @@ constexpr uint32_t kMeasurementIntervalMs = 5000;
 constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
 
+// Compare averages of the oldest and newest three samples in a
+// six-sample window. At the current 5 s sampling interval, the
+// window spans about 25 s. The 0.2 C threshold is provisional
+// and is intended only for basic trend reporting.
+constexpr size_t kTemperatureTrendSampleCount = 6;
+constexpr float kTemperatureTrendThresholdC = 0.2F;
+
 constexpr float kMinimumTemperatureC = -40.0F;
 constexpr float kMaximumTemperatureC = 80.0F;
 constexpr float kMinimumRelativeHumidityPercent = 0.0F;
 constexpr float kMaximumRelativeHumidityPercent = 100.0F;
 
 DHT climateSensor(kDhtDataPin, kDhtType);
+
+uint32_t lastMeasurementMs = 0;
+
+float recentTemperaturesC[kTemperatureTrendSampleCount] = {};
+size_t temperatureSampleCount = 0;
+
+bool hasValidMeasurement = false;
+uint32_t lastValidMeasurementMs = 0;
+
+float lastValidTemperatureC = 0.0F;
+float lastValidRelativeHumidityPercent = 0.0F;
+float lastValidDewPointC = 0.0F;
 
 bool isMeasurementInRange(
     const float temperatureC,
@@ -25,6 +44,217 @@ bool isMeasurementInRange(
                kMinimumRelativeHumidityPercent &&
            relativeHumidityPercent <=
                kMaximumRelativeHumidityPercent;
+}
+
+// Calculate dew point using the Magnus approximation
+// with constants a = 17.62 and b = 243.12 C.
+float calculateDewPointC(
+    const float temperatureC,
+    const float relativeHumidityPercent
+) {
+    if (relativeHumidityPercent <= 0.0F) {
+        return NAN;
+    }
+
+    constexpr float kMagnusA = 17.62F;
+    constexpr float kMagnusB = 243.12F;
+
+    const float gamma =
+        log(relativeHumidityPercent / 100.0F) +
+        (kMagnusA * temperatureC) /
+            (kMagnusB + temperatureC);
+
+    return (kMagnusB * gamma) /
+           (kMagnusA - gamma);
+}
+
+void addTemperatureSample(const float temperatureC) {
+    if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+        recentTemperaturesC[temperatureSampleCount] = temperatureC;
+        ++temperatureSampleCount;
+        return;
+    }
+
+    for (size_t i = 1; i < kTemperatureTrendSampleCount; ++i) {
+        recentTemperaturesC[i - 1] = recentTemperaturesC[i];
+    }
+
+    recentTemperaturesC[kTemperatureTrendSampleCount - 1] =
+        temperatureC;
+}
+
+float calculateTemperatureTrendChangeC() {
+    float olderTotalC = 0.0F;
+    float newerTotalC = 0.0F;
+
+    for (size_t i = 0; i < 3; ++i) {
+        olderTotalC += recentTemperaturesC[i];
+        newerTotalC += recentTemperaturesC[i + 3];
+    }
+
+    const float olderAverageC = olderTotalC / 3.0F;
+    const float newerAverageC = newerTotalC / 3.0F;
+
+    return newerAverageC - olderAverageC;
+}
+
+const char* getTemperatureTrend(const float temperatureChangeC) {
+    if (temperatureChangeC <= -kTemperatureTrendThresholdC) {
+        return "cooling";
+    }
+
+    if (temperatureChangeC >= kTemperatureTrendThresholdC) {
+        return "warming";
+    }
+
+    return "stable";
+}
+
+bool isMeasurementDue(const uint32_t nowMs) {
+    if (nowMs - lastMeasurementMs < kMeasurementIntervalMs) {
+        return false;
+    }
+
+    lastMeasurementMs = nowMs;
+    return true;
+}
+
+void updateLastValidMeasurement(
+    const uint32_t nowMs,
+    const float temperatureC,
+    const float relativeHumidityPercent,
+    const float dewPointC
+) {
+    hasValidMeasurement = true;
+    lastValidMeasurementMs = nowMs;
+
+    lastValidTemperatureC = temperatureC;
+    lastValidRelativeHumidityPercent =
+        relativeHumidityPercent;
+    lastValidDewPointC = dewPointC;
+}
+
+void printUnavailableReadError(
+    const unsigned long uptimeMs
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=read_error"
+        " data_status=unavailable\n",
+        uptimeMs
+    );
+}
+
+void printStaleReadError(
+    const unsigned long uptimeMs,
+    const uint32_t lastValidAgeMs
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=read_error"
+        " data_status=stale"
+        " last_valid_age_ms=%lu"
+        " last_valid_temperature_c=%.1f"
+        " last_valid_relative_humidity_percent=%.1f"
+        " last_valid_dew_point_c=%.1f\n",
+        uptimeMs,
+        static_cast<unsigned long>(lastValidAgeMs),
+        static_cast<double>(lastValidTemperatureC),
+        static_cast<double>(
+            lastValidRelativeHumidityPercent
+        ),
+        static_cast<double>(lastValidDewPointC)
+    );
+}
+
+void printUnavailableInvalidData(
+    const unsigned long uptimeMs,
+    const float temperatureC,
+    const float relativeHumidityPercent
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=invalid_data"
+        " data_status=unavailable"
+        " temperature_c=%.1f"
+        " relative_humidity_percent=%.1f\n",
+        uptimeMs,
+        static_cast<double>(temperatureC),
+        static_cast<double>(relativeHumidityPercent)
+    );
+}
+
+void printStaleInvalidData(
+    const unsigned long uptimeMs,
+    const float temperatureC,
+    const float relativeHumidityPercent,
+    const uint32_t lastValidAgeMs
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=invalid_data"
+        " data_status=stale"
+        " temperature_c=%.1f"
+        " relative_humidity_percent=%.1f"
+        " last_valid_age_ms=%lu"
+        " last_valid_temperature_c=%.1f"
+        " last_valid_relative_humidity_percent=%.1f"
+        " last_valid_dew_point_c=%.1f\n",
+        uptimeMs,
+        static_cast<double>(temperatureC),
+        static_cast<double>(relativeHumidityPercent),
+        static_cast<unsigned long>(lastValidAgeMs),
+        static_cast<double>(lastValidTemperatureC),
+        static_cast<double>(lastValidRelativeHumidityPercent),
+        static_cast<double>(lastValidDewPointC)
+    );
+}
+
+void printCollectingMeasurement(
+    const unsigned long uptimeMs,
+    const float temperatureC,
+    const float relativeHumidityPercent,
+    const float dewPointC
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=ok"
+        " data_status=fresh"
+        " temperature_c=%.1f"
+        " relative_humidity_percent=%.1f"
+        " dew_point_c=%.1f"
+        " temperature_trend=collecting\n",
+        uptimeMs,
+        static_cast<double>(temperatureC),
+        static_cast<double>(relativeHumidityPercent),
+        static_cast<double>(dewPointC)
+    );
+}
+
+void printClimateMeasurement(
+    const unsigned long uptimeMs,
+    const float temperatureC,
+    const float relativeHumidityPercent,
+    const float dewPointC,
+    const char* temperatureTrend,
+    const float temperatureTrendChangeC
+) {
+    Serial.printf(
+        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        " status=ok"
+        " data_status=fresh"
+        " temperature_c=%.1f"
+        " relative_humidity_percent=%.1f"
+        " dew_point_c=%.1f"
+        " temperature_trend=%s"
+        " temperature_change_c=%.2f\n",
+        uptimeMs,
+        static_cast<double>(temperatureC),
+        static_cast<double>(relativeHumidityPercent),
+        static_cast<double>(dewPointC),
+        temperatureTrend,
+        static_cast<double>(temperatureTrendChangeC)
+    );
 }
 
 void printBoardInformation() {
@@ -94,52 +324,111 @@ void setup() {
 
     Serial.printf(
         "TYTO_SENSOR uptime_ms=%lu sensor=am2302"
-        " state=driver_started gpio=%u\n",
+        " state=driver_started gpio=%u"
+        " measurement_interval_ms=%lu\n",
         static_cast<unsigned long>(millis()),
-        static_cast<unsigned>(kDhtDataPin)
+        static_cast<unsigned>(kDhtDataPin),
+        static_cast<unsigned long>(kMeasurementIntervalMs)
     );
 }
 
 void loop() {
+    const uint32_t nowMs = millis();
+
+    if (!isMeasurementDue(nowMs)) {
+        return;
+    }
+
     const float relativeHumidityPercent =
         climateSensor.readHumidity();
     const float temperatureC =
         climateSensor.readTemperature();
 
     const unsigned long uptimeMs =
-        static_cast<unsigned long>(millis());
+        static_cast<unsigned long>(nowMs);
 
     if (isnan(relativeHumidityPercent) ||
         isnan(temperatureC)) {
-        Serial.printf(
-            "TYTO_ENV uptime_ms=%lu sensor=am2302"
-            " status=read_error\n",
-            uptimeMs
-        );
-    } else if (!isMeasurementInRange(
-                   temperatureC,
-                   relativeHumidityPercent
-               )) {
-        Serial.printf(
-            "TYTO_ENV uptime_ms=%lu sensor=am2302"
-            " status=invalid_data"
-            " temperature_c=%.1f"
-            " relative_humidity_percent=%.1f\n",
-            uptimeMs,
-            static_cast<double>(temperatureC),
-            static_cast<double>(relativeHumidityPercent)
-        );
-    } else {
-        Serial.printf(
-            "TYTO_ENV uptime_ms=%lu sensor=am2302"
-            " status=ok"
-            " temperature_c=%.1f"
-            " relative_humidity_percent=%.1f\n",
-            uptimeMs,
-            static_cast<double>(temperatureC),
-            static_cast<double>(relativeHumidityPercent)
-        );
+
+        if (!hasValidMeasurement) {
+            printUnavailableReadError(uptimeMs);
+        } else {
+            const uint32_t lastValidAgeMs =
+                nowMs - lastValidMeasurementMs;
+
+            printStaleReadError(
+                uptimeMs,
+                lastValidAgeMs
+            );
+        }
+
+        return;
     }
 
-    delay(kMeasurementIntervalMs);
+    if (!isMeasurementInRange(
+            temperatureC,
+            relativeHumidityPercent
+        )) {
+
+        if (!hasValidMeasurement) {
+            printUnavailableInvalidData(
+                uptimeMs,
+                temperatureC,
+                relativeHumidityPercent
+            );
+        } else {
+            const uint32_t lastValidAgeMs =
+                nowMs - lastValidMeasurementMs;
+
+            printStaleInvalidData(
+                uptimeMs,
+                temperatureC,
+                relativeHumidityPercent,
+                lastValidAgeMs
+            );
+        }
+
+        return;
+    }
+
+    addTemperatureSample(temperatureC);
+
+    const float dewPointC =
+        calculateDewPointC(
+            temperatureC,
+            relativeHumidityPercent
+        );
+
+    updateLastValidMeasurement(
+        nowMs,
+        temperatureC,
+        relativeHumidityPercent,
+        dewPointC
+    );
+
+    if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+        printCollectingMeasurement(
+            uptimeMs,
+            temperatureC,
+            relativeHumidityPercent,
+            dewPointC
+        );
+
+        return;
+    }
+
+    const float temperatureTrendChangeC =
+        calculateTemperatureTrendChangeC();
+
+    const char* temperatureTrend =
+        getTemperatureTrend(temperatureTrendChangeC);
+
+    printClimateMeasurement(
+        uptimeMs,
+        temperatureC,
+        relativeHumidityPercent,
+        dewPointC,
+        temperatureTrend,
+        temperatureTrendChangeC
+    );
 }

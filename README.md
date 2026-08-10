@@ -12,9 +12,17 @@ Tyto is designed to remain useful without cloud services or another application.
 
 ## Current Status
 
-Environmental sensing is complete for v0.2.0. Tyto reads temperature
-and relative humidity from an AM2302, validates the measurements, and
-reports structured sensor status through serial output.
+Local climate monitoring is complete for v0.3.0. Tyto reads temperature
+and relative humidity from an AM2302 at a configurable interval, validates
+the measurements, and calculates dew point from valid readings.
+
+The firmware also tracks recent temperature changes to report whether the
+measured environment is warming, cooling, or remaining stable. Sensor and
+data status are reported through structured serial output, including stale
+last-known-good measurements when a new sensor read fails.
+
+Tyto continues to operate as a standalone device without Wi-Fi, cloud
+services, or APEX.
 
 See [AM2302 Sensor Setup](docs/am2302-setup.md) for the wiring and
 verification instructions.

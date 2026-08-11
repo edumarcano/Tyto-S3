@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <DHT.h>
 #include <Preferences.h>
+#include <LittleFS.h>
 
 namespace {
 
@@ -36,6 +37,8 @@ uint32_t measurementIntervalMs =
     kDefaultMeasurementIntervalMs;
 
 uint32_t lastMeasurementMs = 0;
+
+bool historyStorageAvailable = false;
 
 char serialCommandBuffer[kSerialCommandBufferSize] = {};
 size_t serialCommandLength = 0;
@@ -498,6 +501,36 @@ void processSerialInput() {
     }
 }
 
+void initializeHistoryStorage() {
+    if (!LittleFS.begin(false)) {
+        historyStorageAvailable = false;
+
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=mount_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    historyStorageAvailable = true;
+
+    Serial.printf(
+        "TYTO_STORAGE uptime_ms=%lu"
+        " status=ready"
+        " total_bytes=%llu"
+        " used_bytes=%llu\n",
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned long long>(
+            LittleFS.totalBytes()
+        ),
+        static_cast<unsigned long long>(
+            LittleFS.usedBytes()
+        )
+    );
+}
+
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
 
@@ -562,6 +595,8 @@ void setup() {
     printBoardInformation();
 
     loadMeasurementInterval();
+
+    initializeHistoryStorage();
 
     climateSensor.begin();
 

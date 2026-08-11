@@ -573,6 +573,45 @@ void initializeHistoryStorage() {
     );
 }
 
+bool initializeHistoryFile() {
+    if (!historyStorageAvailable) {
+        return false;
+    }
+
+    if (LittleFS.exists(kHistoryFilePath)) {
+        return true;
+    }
+
+    File historyFile =
+        LittleFS.open(kHistoryFilePath, FILE_WRITE);
+
+    if (!historyFile) {
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=history_create_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return false;
+    }
+
+    historyFile.println(
+        "uptime_ms,temperature_c,relative_humidity_percent"
+    );
+
+    historyFile.close();
+
+    Serial.printf(
+        "TYTO_STORAGE uptime_ms=%lu"
+        " status=history_created"
+        " path=%s\n",
+        static_cast<unsigned long>(millis()),
+        kHistoryFilePath
+    );
+
+    return true;
+}
+
 bool appendHistoryMeasurement(
     const uint32_t uptimeMs,
     const float temperatureC,
@@ -673,6 +712,7 @@ void setup() {
     loadMeasurementInterval();
 
     initializeHistoryStorage();
+    initializeHistoryFile();
 
     climateSensor.begin();
 

@@ -13,6 +13,8 @@ constexpr uint32_t kMaximumMeasurementIntervalMs = 60000;
 constexpr char kPreferencesNamespace[] = "tyto";
 constexpr char kMeasurementIntervalKey[] = "measure_ms";
 
+constexpr char kHistoryFilePath[] = "/history.csv";
+
 constexpr size_t kSerialCommandBufferSize = 32;
 constexpr char kIntervalCommandPrefix[] = "interval ";
 
@@ -382,7 +384,47 @@ bool saveMeasurementInterval(
     return true;
 }
 
+void printHistory() {
+    if (!historyStorageAvailable) {
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=history_unavailable\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    File historyFile =
+        LittleFS.open(kHistoryFilePath, FILE_READ);
+
+    if (!historyFile) {
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=history_open_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    Serial.println("TYTO_HISTORY_BEGIN");
+
+    while (historyFile.available()) {
+        Serial.write(historyFile.read());
+    }
+
+    Serial.println("TYTO_HISTORY_END");
+
+    historyFile.close();
+}
+
 void handleSerialCommand(const char* command) {
+    if (strcmp(command, "history") == 0) {
+        printHistory();
+        return;
+    }
+
     const size_t prefixLength =
         strlen(kIntervalCommandPrefix);
 
@@ -529,6 +571,40 @@ void initializeHistoryStorage() {
             LittleFS.usedBytes()
         )
     );
+}
+
+bool appendHistoryMeasurement(
+    const uint32_t uptimeMs,
+    const float temperatureC,
+    const float relativeHumidityPercent
+) {
+    if (!historyStorageAvailable) {
+        return false;
+    }
+
+    File historyFile =
+        LittleFS.open(kHistoryFilePath, FILE_APPEND);
+
+    if (!historyFile) {
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=history_open_failed\n",
+            static_cast<unsigned long>(uptimeMs)
+        );
+
+        return false;
+    }
+
+    historyFile.printf(
+        "%lu,%.1f,%.1f\n",
+        static_cast<unsigned long>(uptimeMs),
+        static_cast<double>(temperatureC),
+        static_cast<double>(relativeHumidityPercent)
+    );
+
+    historyFile.close();
+
+    return true;
 }
 
 void printBoardInformation() {
@@ -684,6 +760,12 @@ void loop() {
         temperatureC,
         relativeHumidityPercent,
         dewPointC
+    );
+
+    appendHistoryMeasurement(
+        nowMs,
+        temperatureC,
+        relativeHumidityPercent
     );
 
     if (temperatureSampleCount < kTemperatureTrendSampleCount) {

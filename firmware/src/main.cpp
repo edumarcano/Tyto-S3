@@ -643,15 +643,7 @@ void initializeHistoryStorage() {
     );
 }
 
-bool initializeHistoryFile() {
-    if (!historyStorageAvailable) {
-        return false;
-    }
-
-    if (LittleFS.exists(kHistoryFilePath)) {
-        return true;
-    }
-
+bool createHistoryFile() {
     File historyFile =
         LittleFS.open(kHistoryFilePath, FILE_WRITE);
 
@@ -681,6 +673,18 @@ bool initializeHistoryFile() {
     );
 
     return true;
+}
+
+bool initializeHistoryFile() {
+    if (!historyStorageAvailable) {
+        return false;
+    }
+
+    if (LittleFS.exists(kHistoryFilePath)) {
+        return true;
+    }
+
+    return createHistoryFile();
 }
 
 bool rotateHistoryFile() {
@@ -714,7 +718,7 @@ bool rotateHistoryFile() {
         return false;
     }
 
-    if (!initializeHistoryFile()) {
+    if (!createHistoryFile()) {
         return false;
     }
 

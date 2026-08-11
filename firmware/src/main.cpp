@@ -1,10 +1,15 @@
 #include <Arduino.h>
 #include <DHT.h>
+#include <Preferences.h>
 
 namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
-constexpr uint32_t kMeasurementIntervalMs = 5000;
+constexpr uint32_t kDefaultMeasurementIntervalMs = 5000;
+
+constexpr char kPreferencesNamespace[] = "tyto";
+constexpr char kMeasurementIntervalKey[] = "measure_ms";
+
 constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
 
@@ -21,6 +26,9 @@ constexpr float kMinimumRelativeHumidityPercent = 0.0F;
 constexpr float kMaximumRelativeHumidityPercent = 100.0F;
 
 DHT climateSensor(kDhtDataPin, kDhtType);
+
+uint32_t measurementIntervalMs =
+    kDefaultMeasurementIntervalMs;
 
 uint32_t lastMeasurementMs = 0;
 
@@ -111,7 +119,7 @@ const char* getTemperatureTrend(const float temperatureChangeC) {
 }
 
 bool isMeasurementDue(const uint32_t nowMs) {
-    if (nowMs - lastMeasurementMs < kMeasurementIntervalMs) {
+    if (nowMs - lastMeasurementMs < measurementIntervalMs) {
         return false;
     }
 
@@ -257,6 +265,67 @@ void printClimateMeasurement(
     );
 }
 
+void loadMeasurementInterval() {
+    Preferences preferences;
+
+    if (!preferences.begin(kPreferencesNamespace, false)) {
+        Serial.printf(
+            "TYTO_CONFIG uptime_ms=%lu"
+            " status=nvs_open_failed"
+            " measurement_interval_ms=%lu"
+            " source=default\n",
+            static_cast<unsigned long>(millis()),
+            static_cast<unsigned long>(
+                measurementIntervalMs
+            )
+        );
+
+        return;
+    }
+
+    const bool hasStoredInterval =
+        preferences.isKey(kMeasurementIntervalKey);
+
+    const char* source = "persisted";
+    const char* status = "ok";
+
+    if (hasStoredInterval) {
+        measurementIntervalMs =
+            preferences.getUInt(
+                kMeasurementIntervalKey,
+                kDefaultMeasurementIntervalMs
+            );
+    } else {
+        const size_t bytesWritten =
+            preferences.putUInt(
+                kMeasurementIntervalKey,
+                kDefaultMeasurementIntervalMs
+            );
+
+        if (bytesWritten == sizeof(uint32_t)) {
+            source = "default_initialized";
+        } else {
+            source = "default";
+            status = "write_failed";
+        }
+    }
+
+    preferences.end();
+
+    Serial.printf(
+        "TYTO_CONFIG uptime_ms=%lu"
+        " status=%s"
+        " measurement_interval_ms=%lu"
+        " source=%s\n",
+        static_cast<unsigned long>(millis()),
+        status,
+        static_cast<unsigned long>(
+            measurementIntervalMs
+        ),
+        source
+    );
+}
+
 void printBoardInformation() {
     const String chipModel = ESP.getChipModel();
 
@@ -320,6 +389,8 @@ void setup() {
 
     printBoardInformation();
 
+    loadMeasurementInterval();
+
     climateSensor.begin();
 
     Serial.printf(
@@ -328,7 +399,7 @@ void setup() {
         " measurement_interval_ms=%lu\n",
         static_cast<unsigned long>(millis()),
         static_cast<unsigned>(kDhtDataPin),
-        static_cast<unsigned long>(kMeasurementIntervalMs)
+        static_cast<unsigned long>(measurementIntervalMs)
     );
 }
 

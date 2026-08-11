@@ -6,9 +6,14 @@ namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
 constexpr uint32_t kDefaultMeasurementIntervalMs = 5000;
+constexpr uint32_t kMinimumMeasurementIntervalMs = 2000;
+constexpr uint32_t kMaximumMeasurementIntervalMs = 60000;
 
 constexpr char kPreferencesNamespace[] = "tyto";
 constexpr char kMeasurementIntervalKey[] = "measure_ms";
+
+constexpr size_t kSerialCommandBufferSize = 32;
+constexpr char kIntervalCommandPrefix[] = "interval ";
 
 constexpr uint8_t kDhtDataPin = 4;
 constexpr uint8_t kDhtType = DHT22;
@@ -32,6 +37,9 @@ uint32_t measurementIntervalMs =
 
 uint32_t lastMeasurementMs = 0;
 
+char serialCommandBuffer[kSerialCommandBufferSize] = {};
+size_t serialCommandLength = 0;
+
 float recentTemperaturesC[kTemperatureTrendSampleCount] = {};
 size_t temperatureSampleCount = 0;
 
@@ -52,6 +60,11 @@ bool isMeasurementInRange(
                kMinimumRelativeHumidityPercent &&
            relativeHumidityPercent <=
                kMaximumRelativeHumidityPercent;
+}
+
+bool isMeasurementIntervalValid(const uint32_t intervalMs) {
+    return intervalMs >= kMinimumMeasurementIntervalMs &&
+           intervalMs <= kMaximumMeasurementIntervalMs;
 }
 
 // Calculate dew point using the Magnus approximation
@@ -290,11 +303,22 @@ void loadMeasurementInterval() {
     const char* status = "ok";
 
     if (hasStoredInterval) {
-        measurementIntervalMs =
+        const uint32_t storedIntervalMs =
             preferences.getUInt(
                 kMeasurementIntervalKey,
                 kDefaultMeasurementIntervalMs
             );
+
+        if (isMeasurementIntervalValid(storedIntervalMs)) {
+            measurementIntervalMs = storedIntervalMs;
+        } else {
+            measurementIntervalMs =
+                kDefaultMeasurementIntervalMs;
+
+            source = "default";
+            status = "invalid_persisted_value";
+        }
+
     } else {
         const size_t bytesWritten =
             preferences.putUInt(
@@ -324,6 +348,154 @@ void loadMeasurementInterval() {
         ),
         source
     );
+}
+
+bool saveMeasurementInterval(
+    const uint32_t intervalMs
+) {
+    if (!isMeasurementIntervalValid(intervalMs)) {
+        return false;
+    }
+
+    Preferences preferences;
+
+    if (!preferences.begin(kPreferencesNamespace, false)) {
+        return false;
+    }
+
+    const size_t bytesWritten =
+        preferences.putUInt(
+            kMeasurementIntervalKey,
+            intervalMs
+        );
+
+    preferences.end();
+
+    if (bytesWritten != sizeof(uint32_t)) {
+        return false;
+    }
+
+    measurementIntervalMs = intervalMs;
+    return true;
+}
+
+void handleSerialCommand(const char* command) {
+    const size_t prefixLength =
+        strlen(kIntervalCommandPrefix);
+
+    if (strncmp(
+            command,
+            kIntervalCommandPrefix,
+            prefixLength
+        ) != 0) {
+
+        Serial.printf(
+            "TYTO_CONFIG uptime_ms=%lu"
+            " status=unknown_command\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    const char* valueText =
+        command + prefixLength;
+
+    char* endPointer = nullptr;
+
+    const unsigned long parsedValue =
+        strtoul(
+            valueText,
+            &endPointer,
+            10
+        );
+
+    if (endPointer == valueText ||
+        *endPointer != '\0') {
+
+        Serial.printf(
+            "TYTO_CONFIG uptime_ms=%lu"
+            " status=invalid_command_value\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    const uint32_t intervalMs =
+        static_cast<uint32_t>(parsedValue);
+
+    if (!isMeasurementIntervalValid(intervalMs)) {
+        Serial.printf(
+            "TYTO_CONFIG uptime_ms=%lu"
+            " status=interval_out_of_range"
+            " minimum_ms=%lu"
+            " maximum_ms=%lu\n",
+            static_cast<unsigned long>(millis()),
+            static_cast<unsigned long>(
+                kMinimumMeasurementIntervalMs
+            ),
+            static_cast<unsigned long>(
+                kMaximumMeasurementIntervalMs
+            )
+        );
+
+        return;
+    }
+
+    if (!saveMeasurementInterval(intervalMs)) {
+        Serial.printf(
+            "TYTO_CONFIG uptime_ms=%lu"
+            " status=save_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return;
+    }
+
+    Serial.printf(
+        "TYTO_CONFIG uptime_ms=%lu"
+        " status=updated"
+        " measurement_interval_ms=%lu\n",
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned long>(
+            measurementIntervalMs
+        )
+    );
+}
+
+void processSerialInput() {
+    while (Serial.available() > 0) {
+        const char character =
+            static_cast<char>(Serial.read());
+
+        if (character == '\r') {
+            continue;
+        }
+
+        if (character == '\n') {
+            serialCommandBuffer[serialCommandLength] =
+                '\0';
+
+            if (serialCommandLength > 0) {
+                handleSerialCommand(
+                    serialCommandBuffer
+                );
+            }
+
+            serialCommandLength = 0;
+            return;
+        }
+
+        if (serialCommandLength <
+            kSerialCommandBufferSize - 1) {
+
+            serialCommandBuffer[serialCommandLength] =
+                character;
+
+            ++serialCommandLength;
+        }
+    }
 }
 
 void printBoardInformation() {
@@ -404,6 +576,8 @@ void setup() {
 }
 
 void loop() {
+    processSerialInput();
+
     const uint32_t nowMs = millis();
 
     if (!isMeasurementDue(nowMs)) {

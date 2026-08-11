@@ -659,7 +659,8 @@ bool createHistoryFile() {
 
     historyFile.println(
         "boot_id,uptime_ms,temperature_c,"
-        "relative_humidity_percent"
+        "relative_humidity_percent,dew_point_c,"
+        "temperature_trend,temperature_change_c"
     );
 
     historyFile.close();
@@ -734,7 +735,11 @@ bool rotateHistoryFile() {
 bool appendHistoryMeasurement(
     const uint32_t uptimeMs,
     const float temperatureC,
-    const float relativeHumidityPercent
+    const float relativeHumidityPercent,
+    const float dewPointC,
+    const char* temperatureTrend,
+    const bool hasTemperatureTrendChange,
+    const float temperatureTrendChangeC
 ) {
     if (!historyStorageAvailable) {
         return false;
@@ -774,16 +779,30 @@ bool appendHistoryMeasurement(
         }
     }
 
-    historyFile.printf(
-        "%lu,%lu,%.1f,%.1f\n",
-        static_cast<unsigned long>(bootId),
-        static_cast<unsigned long>(uptimeMs),
-        static_cast<double>(temperatureC),
-        static_cast<double>(relativeHumidityPercent)
-    );
+    if (hasTemperatureTrendChange) {
+        historyFile.printf(
+            "%lu,%lu,%.1f,%.1f,%.1f,%s,%.2f\n",
+            static_cast<unsigned long>(bootId),
+            static_cast<unsigned long>(uptimeMs),
+            static_cast<double>(temperatureC),
+            static_cast<double>(relativeHumidityPercent),
+         static_cast<double>(dewPointC),
+            temperatureTrend,
+            static_cast<double>(temperatureTrendChangeC)
+        );
+    } else {
+        historyFile.printf(
+            "%lu,%lu,%.1f,%.1f,%.1f,%s,\n",
+            static_cast<unsigned long>(bootId),
+            static_cast<unsigned long>(uptimeMs),
+            static_cast<double>(temperatureC),
+            static_cast<double>(relativeHumidityPercent),
+            static_cast<double>(dewPointC),
+            temperatureTrend
+        );
+    }
 
     historyFile.close();
-
     return true;
 }
 
@@ -944,13 +963,17 @@ void loop() {
         dewPointC
     );
 
-    appendHistoryMeasurement(
-        nowMs,
-        temperatureC,
-        relativeHumidityPercent
-    );
-
     if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+        appendHistoryMeasurement(
+            nowMs,
+            temperatureC,
+            relativeHumidityPercent,
+            dewPointC,
+            "collecting",
+            false,
+            0.0F
+        );
+
         printCollectingMeasurement(
             uptimeMs,
             temperatureC,
@@ -966,6 +989,16 @@ void loop() {
 
     const char* temperatureTrend =
         getTemperatureTrend(temperatureTrendChangeC);
+
+    appendHistoryMeasurement(
+        nowMs,
+        temperatureC,
+        relativeHumidityPercent,
+        dewPointC,
+        temperatureTrend,
+        true,
+        temperatureTrendChangeC
+    );
 
     printClimateMeasurement(
         uptimeMs,

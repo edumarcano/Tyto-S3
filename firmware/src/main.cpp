@@ -15,6 +15,7 @@ constexpr char kMeasurementIntervalKey[] = "measure_ms";
 constexpr char kBootIdKey[] = "boot_id";
 
 constexpr char kHistoryFilePath[] = "/history.csv";
+constexpr char kPreviousHistoryFilePath[] = "/history-old.csv";
 
 constexpr size_t kMaximumHistoryFileBytes =
     2UL * 1024UL * 1024UL;
@@ -440,7 +441,7 @@ bool saveMeasurementInterval(
     return true;
 }
 
-void printHistory() {
+void printHistory(const char* historyFilePath) {
     if (!historyStorageAvailable) {
         Serial.printf(
             "TYTO_STORAGE uptime_ms=%lu"
@@ -452,32 +453,45 @@ void printHistory() {
     }
 
     File historyFile =
-        LittleFS.open(kHistoryFilePath, FILE_READ);
+        LittleFS.open(historyFilePath, FILE_READ);
 
     if (!historyFile) {
         Serial.printf(
             "TYTO_STORAGE uptime_ms=%lu"
-            " status=history_open_failed\n",
-            static_cast<unsigned long>(millis())
+            " status=history_open_failed"
+            " path=%s\n",
+            static_cast<unsigned long>(millis()),
+            historyFilePath
         );
 
         return;
     }
 
-    Serial.println("TYTO_HISTORY_BEGIN");
+    Serial.printf(
+        "TYTO_HISTORY_BEGIN path=%s\n",
+        historyFilePath
+    );
 
     while (historyFile.available()) {
         Serial.write(historyFile.read());
     }
 
-    Serial.println("TYTO_HISTORY_END");
+    Serial.printf(
+        "TYTO_HISTORY_END path=%s\n",
+        historyFilePath
+    );
 
     historyFile.close();
 }
 
 void handleSerialCommand(const char* command) {
     if (strcmp(command, "history") == 0) {
-        printHistory();
+        printHistory(kHistoryFilePath);
+        return;
+    }
+
+    if (strcmp(command, "history old") == 0) {
+        printHistory(kPreviousHistoryFilePath);
         return;
     }
 
@@ -669,6 +683,50 @@ bool initializeHistoryFile() {
     return true;
 }
 
+bool rotateHistoryFile() {
+    if (!historyStorageAvailable) {
+        return false;
+    }
+
+    if (LittleFS.exists(kPreviousHistoryFilePath)) {
+        if (!LittleFS.remove(kPreviousHistoryFilePath)) {
+            Serial.printf(
+                "TYTO_STORAGE uptime_ms=%lu"
+                " status=history_old_remove_failed\n",
+                static_cast<unsigned long>(millis())
+            );
+
+            return false;
+        }
+    }
+
+    if (!LittleFS.rename(
+            kHistoryFilePath,
+            kPreviousHistoryFilePath
+        )) {
+
+        Serial.printf(
+            "TYTO_STORAGE uptime_ms=%lu"
+            " status=history_rotate_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return false;
+    }
+
+    if (!initializeHistoryFile()) {
+        return false;
+    }
+
+    Serial.printf(
+        "TYTO_STORAGE uptime_ms=%lu"
+        " status=history_rotated\n",
+        static_cast<unsigned long>(millis())
+    );
+
+    return true;
+}
+
 bool appendHistoryMeasurement(
     const uint32_t uptimeMs,
     const float temperatureC,
@@ -691,20 +749,25 @@ bool appendHistoryMeasurement(
     return false;
 }
 
-    if (historyFile.size() >= kMaximumHistoryFileBytes) {
-    historyFile.close();
+   if (historyFile.size() >= kMaximumHistoryFileBytes) {
+        historyFile.close();
 
-    Serial.printf(
-        "TYTO_STORAGE uptime_ms=%lu"
-        " status=history_full"
-        " maximum_bytes=%lu\n",
-        static_cast<unsigned long>(uptimeMs),
-        static_cast<unsigned long>(
-            kMaximumHistoryFileBytes
-        )
-    );
+        if (!rotateHistoryFile()) {
+            return false;
+        }
 
-        return false;
+        historyFile =
+            LittleFS.open(kHistoryFilePath, FILE_APPEND);
+
+        if (!historyFile) {
+            Serial.printf(
+                "TYTO_STORAGE uptime_ms=%lu"
+                " status=history_open_failed\n",
+                static_cast<unsigned long>(uptimeMs)
+            );
+
+            return false;
+        }
     }
 
     historyFile.printf(

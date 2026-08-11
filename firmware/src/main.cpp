@@ -12,6 +12,7 @@ constexpr uint32_t kMaximumMeasurementIntervalMs = 60000;
 
 constexpr char kPreferencesNamespace[] = "tyto";
 constexpr char kMeasurementIntervalKey[] = "measure_ms";
+constexpr char kBootIdKey[] = "boot_id";
 
 constexpr char kHistoryFilePath[] = "/history.csv";
 
@@ -37,6 +38,8 @@ DHT climateSensor(kDhtDataPin, kDhtType);
 
 uint32_t measurementIntervalMs =
     kDefaultMeasurementIntervalMs;
+
+uint32_t bootId = 0;
 
 uint32_t lastMeasurementMs = 0;
 
@@ -355,6 +358,56 @@ void loadMeasurementInterval() {
     );
 }
 
+bool initializeBootId() {
+    Preferences preferences;
+
+    if (!preferences.begin(kPreferencesNamespace, false)) {
+        Serial.printf(
+            "TYTO_BOOT uptime_ms=%lu"
+            " status=nvs_open_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return false;
+    }
+
+    const uint32_t previousBootId =
+        preferences.getUInt(kBootIdKey, 0);
+
+    const uint32_t nextBootId =
+        previousBootId + 1;
+
+    const size_t bytesWritten =
+        preferences.putUInt(
+            kBootIdKey,
+            nextBootId
+        );
+
+    preferences.end();
+
+    if (bytesWritten != sizeof(uint32_t)) {
+        Serial.printf(
+            "TYTO_BOOT uptime_ms=%lu"
+            " status=write_failed\n",
+            static_cast<unsigned long>(millis())
+        );
+
+        return false;
+    }
+
+    bootId = nextBootId;
+
+    Serial.printf(
+        "TYTO_BOOT uptime_ms=%lu"
+        " status=ready"
+        " boot_id=%lu\n",
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned long>(bootId)
+    );
+
+    return true;
+}
+
 bool saveMeasurementInterval(
     const uint32_t intervalMs
 ) {
@@ -596,7 +649,8 @@ bool initializeHistoryFile() {
     }
 
     historyFile.println(
-        "uptime_ms,temperature_c,relative_humidity_percent"
+        "boot_id,uptime_ms,temperature_c,"
+        "relative_humidity_percent"
     );
 
     historyFile.close();
@@ -635,7 +689,8 @@ bool appendHistoryMeasurement(
     }
 
     historyFile.printf(
-        "%lu,%.1f,%.1f\n",
+        "%lu,%lu,%.1f,%.1f\n",
+        static_cast<unsigned long>(bootId),
         static_cast<unsigned long>(uptimeMs),
         static_cast<double>(temperatureC),
         static_cast<double>(relativeHumidityPercent)
@@ -710,6 +765,7 @@ void setup() {
     printBoardInformation();
 
     loadMeasurementInterval();
+    initializeBootId();
 
     initializeHistoryStorage();
     initializeHistoryFile();

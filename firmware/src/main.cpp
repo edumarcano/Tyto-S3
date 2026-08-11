@@ -16,6 +16,9 @@ constexpr char kBootIdKey[] = "boot_id";
 
 constexpr char kHistoryFilePath[] = "/history.csv";
 
+constexpr size_t kMaximumHistoryFileBytes =
+    2UL * 1024UL * 1024UL;
+
 constexpr size_t kSerialCommandBufferSize = 32;
 constexpr char kIntervalCommandPrefix[] = "interval ";
 
@@ -684,6 +687,22 @@ bool appendHistoryMeasurement(
             " status=history_open_failed\n",
             static_cast<unsigned long>(uptimeMs)
         );
+
+    return false;
+}
+
+    if (historyFile.size() >= kMaximumHistoryFileBytes) {
+    historyFile.close();
+
+    Serial.printf(
+        "TYTO_STORAGE uptime_ms=%lu"
+        " status=history_full"
+        " maximum_bytes=%lu\n",
+        static_cast<unsigned long>(uptimeMs),
+        static_cast<unsigned long>(
+            kMaximumHistoryFileBytes
+        )
+    );
 
         return false;
     }

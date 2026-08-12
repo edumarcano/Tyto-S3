@@ -35,6 +35,8 @@ Tyto is developed in small stages. Each release should leave the device working 
 
 ## v0.4.0 — History and configuration
 
+**Status: Complete**
+
 - Preserve important settings across restarts
 - Store or export measurements for later analysis
 - Include timestamps or reliable elapsed-time information

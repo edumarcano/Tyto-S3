@@ -1,6 +1,6 @@
 # AM2302 Sensor Setup
 
-Tyto v0.3.0 uses a three-pin ASAIR AM2302 temperature and
+Tyto uses a three-pin ASAIR AM2302 temperature and
 relative-humidity module.
 
 ## Hardware
@@ -116,6 +116,10 @@ TYTO_CONFIG uptime_ms=2127 status=ok measurement_interval_ms=10000 source=persis
 ```
 
 Invalid values are rejected without changing the active interval.
+
+See [Climate history](climate-history.md) for persistent history,
+storage, and export details.
+
 
 ## Validation behavior
 

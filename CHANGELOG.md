@@ -4,6 +4,8 @@
 
 ## v0.4.0 — History and configuration
 
+**Released:** August 11, 2026
+
 ### Added
 
 * Persistent measurement interval configuration using ESP32 NVS
@@ -14,6 +16,7 @@
 * Bounded history rotation with one previous history file retained
 * Serial commands for viewing and exporting stored history
 * Climate-history documentation covering storage, CSV format, configuration, and export
+* Repository MIT license
 
 ### Changed
 

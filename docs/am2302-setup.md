@@ -1,6 +1,6 @@
 # AM2302 Sensor Setup
 
-Tyto v0.3.0 uses a three-pin ASAIR AM2302 temperature and
+Tyto uses a three-pin ASAIR AM2302 temperature and
 relative-humidity module.
 
 ## Hardware
@@ -96,8 +96,30 @@ A received measurement outside the accepted sensor range is reported as
 is `unavailable`. If a previous valid measurement exists, that retained
 measurement is reported separately as stale.
 
-Measurements are attempted every five seconds by default. The interval is
-configured in the firmware through `kMeasurementIntervalMs`.
+Measurements are attempted every five seconds by default.
+
+The measurement interval can be changed at runtime through the serial
+monitor using:
+
+```text
+interval 10000
+```
+The value is specified in milliseconds and must be between 2000 ms and
+60000 ms. A successful update is stored in ESP32 nonvolatile storage and
+survives resets and power cycles.
+
+At startup, Tyto reports the active interval and whether it came from
+persistent configuration:
+
+```text
+TYTO_CONFIG uptime_ms=2127 status=ok measurement_interval_ms=10000 source=persisted
+```
+
+Invalid values are rejected without changing the active interval.
+
+See [Climate history](climate-history.md) for persistent history,
+storage, and export details.
+
 
 ## Validation behavior
 

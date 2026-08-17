@@ -14,7 +14,7 @@ Tyto is designed to remain useful without cloud services or another application.
 
 History and configuration are complete for v0.4.0.
 
-Tyto reads temperature and relative humidity from an AM2302 at a configurable interval, validates the measurements, and calculates derived values including dew point and short-term temperature trend.
+Tyto reads temperature and relative humidity from an SHT31 over I2C at a configurable interval, validates the measurements, and calculates derived values including dew point and short-term temperature trend.
 
 The measurement interval can be changed over serial and is preserved across resets and power cycles.
 
@@ -22,7 +22,7 @@ Valid climate measurements are also stored locally on the ESP32-S3 using LittleF
 
 Tyto continues to operate as a standalone device without Wi-Fi, cloud services, or APEX.
 
-See [AM2302 Sensor Setup](docs/am2302-setup.md) for wiring, sensor behavior, and measurement configuration.
+See [SHT31 Sensor Setup](docs/sht31-setup.md) for wiring, sensor behavior, and measurement configuration.
 
 See [Climate History](docs/climate-history.md) for local storage, CSV format, history rotation, and export instructions.
 

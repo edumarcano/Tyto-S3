@@ -1,5 +1,6 @@
 #include <Arduino.h>
-#include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_SHT31.h>
 #include <Preferences.h>
 #include <LittleFS.h>
 
@@ -23,8 +24,9 @@ constexpr size_t kMaximumHistoryFileBytes =
 constexpr size_t kSerialCommandBufferSize = 32;
 constexpr char kIntervalCommandPrefix[] = "interval ";
 
-constexpr uint8_t kDhtDataPin = 4;
-constexpr uint8_t kDhtType = DHT22;
+constexpr uint8_t kI2cSdaPin = 8;
+constexpr uint8_t kI2cSclPin = 9;
+constexpr uint8_t kSht31Address = 0x44;
 
 // Compare averages of the oldest and newest three samples in a
 // six-sample window. At the current 5 s sampling interval, the
@@ -38,7 +40,7 @@ constexpr float kMaximumTemperatureC = 80.0F;
 constexpr float kMinimumRelativeHumidityPercent = 0.0F;
 constexpr float kMaximumRelativeHumidityPercent = 100.0F;
 
-DHT climateSensor(kDhtDataPin, kDhtType);
+Adafruit_SHT31 climateSensor = Adafruit_SHT31();
 
 uint32_t measurementIntervalMs =
     kDefaultMeasurementIntervalMs;
@@ -171,7 +173,7 @@ void printUnavailableReadError(
     const unsigned long uptimeMs
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=read_error"
         " data_status=unavailable\n",
         uptimeMs
@@ -183,7 +185,7 @@ void printStaleReadError(
     const uint32_t lastValidAgeMs
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=read_error"
         " data_status=stale"
         " last_valid_age_ms=%lu"
@@ -206,7 +208,7 @@ void printUnavailableInvalidData(
     const float relativeHumidityPercent
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=invalid_data"
         " data_status=unavailable"
         " temperature_c=%.1f"
@@ -224,7 +226,7 @@ void printStaleInvalidData(
     const uint32_t lastValidAgeMs
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=invalid_data"
         " data_status=stale"
         " temperature_c=%.1f"
@@ -250,7 +252,7 @@ void printCollectingMeasurement(
     const float dewPointC
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=ok"
         " data_status=fresh"
         " temperature_c=%.1f"
@@ -273,7 +275,7 @@ void printClimateMeasurement(
     const float temperatureTrendChangeC
 ) {
     Serial.printf(
-        "TYTO_ENV uptime_ms=%lu sensor=am2302"
+        "TYTO_ENV uptime_ms=%lu sensor=sht31"
         " status=ok"
         " data_status=fresh"
         " temperature_c=%.1f"
@@ -875,14 +877,23 @@ void setup() {
     initializeHistoryStorage();
     initializeHistoryFile();
 
-    climateSensor.begin();
+    Wire.begin(kI2cSdaPin, kI2cSclPin);
+
+    const bool sensorInitialized =
+        climateSensor.begin(kSht31Address);
 
     Serial.printf(
-        "TYTO_SENSOR uptime_ms=%lu sensor=am2302"
-        " state=driver_started gpio=%u"
+        "TYTO_SENSOR uptime_ms=%lu sensor=sht31"
+        " state=%s"
+        " address=0x%02X"
+        " sda_gpio=%u"
+        " scl_gpio=%u"
         " measurement_interval_ms=%lu\n",
         static_cast<unsigned long>(millis()),
-        static_cast<unsigned>(kDhtDataPin),
+        sensorInitialized ? "ready" : "init_failed",
+        static_cast<unsigned>(kSht31Address),
+        static_cast<unsigned>(kI2cSdaPin),
+        static_cast<unsigned>(kI2cSclPin),
         static_cast<unsigned long>(measurementIntervalMs)
     );
 }

@@ -3,6 +3,7 @@
 #include <Adafruit_SHT31.h>
 #include <Preferences.h>
 #include <LittleFS.h>
+#include "climate.h"
 
 namespace {
 
@@ -28,18 +29,6 @@ constexpr uint8_t kI2cSdaPin = 8;
 constexpr uint8_t kI2cSclPin = 9;
 constexpr uint8_t kSht31Address = 0x44;
 
-// Compare averages of the oldest and newest three samples in a
-// six-sample window. At the current 5 s sampling interval, the
-// window spans about 25 s. The 0.2 C threshold is provisional
-// and is intended only for basic trend reporting.
-constexpr size_t kTemperatureTrendSampleCount = 6;
-constexpr float kTemperatureTrendThresholdC = 0.2F;
-
-constexpr float kMinimumTemperatureC = -40.0F;
-constexpr float kMaximumTemperatureC = 80.0F;
-constexpr float kMinimumRelativeHumidityPercent = 0.0F;
-constexpr float kMaximumRelativeHumidityPercent = 100.0F;
-
 Adafruit_SHT31 climateSensor = Adafruit_SHT31();
 
 uint32_t measurementIntervalMs =
@@ -56,9 +45,6 @@ bool clearHistory();
 char serialCommandBuffer[kSerialCommandBufferSize] = {};
 size_t serialCommandLength = 0;
 
-float recentTemperaturesC[kTemperatureTrendSampleCount] = {};
-size_t temperatureSampleCount = 0;
-
 bool hasValidMeasurement = false;
 uint32_t lastValidMeasurementMs = 0;
 
@@ -66,85 +52,9 @@ float lastValidTemperatureC = 0.0F;
 float lastValidRelativeHumidityPercent = 0.0F;
 float lastValidDewPointC = 0.0F;
 
-bool isMeasurementInRange(
-    const float temperatureC,
-    const float relativeHumidityPercent
-) {
-    return temperatureC >= kMinimumTemperatureC &&
-           temperatureC <= kMaximumTemperatureC &&
-           relativeHumidityPercent >=
-               kMinimumRelativeHumidityPercent &&
-           relativeHumidityPercent <=
-               kMaximumRelativeHumidityPercent;
-}
-
 bool isMeasurementIntervalValid(const uint32_t intervalMs) {
     return intervalMs >= kMinimumMeasurementIntervalMs &&
            intervalMs <= kMaximumMeasurementIntervalMs;
-}
-
-// Calculate dew point using the Magnus approximation
-// with constants a = 17.62 and b = 243.12 C.
-float calculateDewPointC(
-    const float temperatureC,
-    const float relativeHumidityPercent
-) {
-    if (relativeHumidityPercent <= 0.0F) {
-        return NAN;
-    }
-
-    constexpr float kMagnusA = 17.62F;
-    constexpr float kMagnusB = 243.12F;
-
-    const float gamma =
-        log(relativeHumidityPercent / 100.0F) +
-        (kMagnusA * temperatureC) /
-            (kMagnusB + temperatureC);
-
-    return (kMagnusB * gamma) /
-           (kMagnusA - gamma);
-}
-
-void addTemperatureSample(const float temperatureC) {
-    if (temperatureSampleCount < kTemperatureTrendSampleCount) {
-        recentTemperaturesC[temperatureSampleCount] = temperatureC;
-        ++temperatureSampleCount;
-        return;
-    }
-
-    for (size_t i = 1; i < kTemperatureTrendSampleCount; ++i) {
-        recentTemperaturesC[i - 1] = recentTemperaturesC[i];
-    }
-
-    recentTemperaturesC[kTemperatureTrendSampleCount - 1] =
-        temperatureC;
-}
-
-float calculateTemperatureTrendChangeC() {
-    float olderTotalC = 0.0F;
-    float newerTotalC = 0.0F;
-
-    for (size_t i = 0; i < 3; ++i) {
-        olderTotalC += recentTemperaturesC[i];
-        newerTotalC += recentTemperaturesC[i + 3];
-    }
-
-    const float olderAverageC = olderTotalC / 3.0F;
-    const float newerAverageC = newerTotalC / 3.0F;
-
-    return newerAverageC - olderAverageC;
-}
-
-const char* getTemperatureTrend(const float temperatureChangeC) {
-    if (temperatureChangeC <= -kTemperatureTrendThresholdC) {
-        return "cooling";
-    }
-
-    if (temperatureChangeC >= kTemperatureTrendThresholdC) {
-        return "warming";
-    }
-
-    return "stable";
 }
 
 bool isMeasurementDue(const uint32_t nowMs) {
@@ -1014,7 +924,7 @@ void loop() {
         dewPointC
     );
 
-    if (temperatureSampleCount < kTemperatureTrendSampleCount) {
+    if (!isTemperatureTrendReady()) {
         appendHistoryMeasurement(
             nowMs,
             temperatureC,

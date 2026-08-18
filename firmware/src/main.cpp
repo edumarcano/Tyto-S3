@@ -51,6 +51,8 @@ uint32_t lastMeasurementMs = 0;
 
 bool historyStorageAvailable = false;
 
+bool clearHistory();
+
 char serialCommandBuffer[kSerialCommandBufferSize] = {};
 size_t serialCommandLength = 0;
 
@@ -497,6 +499,24 @@ void handleSerialCommand(const char* command) {
         return;
     }
 
+    if (strcmp(command, "history clear") == 0) {
+        if (clearHistory()) {
+            Serial.printf(
+                "TYTO_STORAGE uptime_ms=%lu"
+                " status=history_cleared\n",
+                static_cast<unsigned long>(millis())
+            );
+        } else {
+            Serial.printf(
+                "TYTO_STORAGE uptime_ms=%lu"
+                " status=history_clear_failed\n",
+                static_cast<unsigned long>(millis())
+            );
+        }
+
+        return;
+    }
+
     const size_t prefixLength =
         strlen(kIntervalCommandPrefix);
 
@@ -732,6 +752,26 @@ bool rotateHistoryFile() {
     );
 
     return true;
+}
+
+bool clearHistory() {
+    if (!historyStorageAvailable) {
+        return false;
+    }
+
+    if (LittleFS.exists(kHistoryFilePath)) {
+        if (!LittleFS.remove(kHistoryFilePath)) {
+            return false;
+        }
+    }
+
+    if (LittleFS.exists(kPreviousHistoryFilePath)) {
+        if (!LittleFS.remove(kPreviousHistoryFilePath)) {
+            return false;
+        }
+    }
+
+    return createHistoryFile();
 }
 
 bool appendHistoryMeasurement(

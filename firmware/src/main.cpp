@@ -1,20 +1,13 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_SHT31.h>
 #include "climate.h"
 #include "config.h"
 #include "history.h"
 #include "serial_commands.h"
+#include "sensor.h"
 
 namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
-
-constexpr uint8_t kI2cSdaPin = 8;
-constexpr uint8_t kI2cSclPin = 9;
-constexpr uint8_t kSht31Address = 0x44;
-
-Adafruit_SHT31 climateSensor = Adafruit_SHT31();
 
 uint32_t lastMeasurementMs = 0;
 
@@ -244,26 +237,8 @@ void setup() {
     initializeHistoryStorage();
     initializeHistoryFile();
 
-    Wire.begin(kI2cSdaPin, kI2cSclPin);
-
-    const bool sensorInitialized =
-        climateSensor.begin(kSht31Address);
-
-    Serial.printf(
-        "TYTO_SENSOR uptime_ms=%lu sensor=sht31"
-        " state=%s"
-        " address=0x%02X"
-        " sda_gpio=%u"
-        " scl_gpio=%u"
-        " measurement_interval_ms=%lu\n",
-        static_cast<unsigned long>(millis()),
-        sensorInitialized ? "ready" : "init_failed",
-        static_cast<unsigned>(kSht31Address),
-        static_cast<unsigned>(kI2cSdaPin),
-        static_cast<unsigned>(kI2cSclPin),
-        static_cast<unsigned long>(
-            getMeasurementIntervalMs()
-        )
+    initializeClimateSensor(
+        getMeasurementIntervalMs()
     );
 }
 
@@ -276,16 +251,19 @@ void loop() {
         return;
     }
 
-    const float relativeHumidityPercent =
-        climateSensor.readHumidity();
+    const ClimateSensorReading sensorReading =
+        readClimateSensor();
+
     const float temperatureC =
-        climateSensor.readTemperature();
+        sensorReading.temperatureC;
+
+    const float relativeHumidityPercent =
+        sensorReading.relativeHumidityPercent;
 
     const unsigned long uptimeMs =
         static_cast<unsigned long>(nowMs);
 
-    if (isnan(relativeHumidityPercent) ||
-        isnan(temperatureC)) {
+    if (!sensorReading.readSucceeded) {
 
         if (!hasValidMeasurement) {
             printUnavailableReadError(uptimeMs);

@@ -23,7 +23,7 @@ The experiment is intended to capture normal room-climate behavior rather than i
 ## Run details
 
 ```text
-Start date and time: 10:27 AM
+Start date and time: 08-18-2026 10:27 AM
 Boot ID: 46
 ```
 

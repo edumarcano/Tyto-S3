@@ -1,20 +1,13 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_SHT31.h>
-#include <Preferences.h>
 #include <LittleFS.h>
 #include "climate.h"
+#include "config.h"
 
 namespace {
 
 constexpr uint32_t kBytesPerMegabyte = 1024UL * 1024UL;
-constexpr uint32_t kDefaultMeasurementIntervalMs = 5000;
-constexpr uint32_t kMinimumMeasurementIntervalMs = 2000;
-constexpr uint32_t kMaximumMeasurementIntervalMs = 60000;
-
-constexpr char kPreferencesNamespace[] = "tyto";
-constexpr char kMeasurementIntervalKey[] = "measure_ms";
-constexpr char kBootIdKey[] = "boot_id";
 
 constexpr char kHistoryFilePath[] = "/history.csv";
 constexpr char kPreviousHistoryFilePath[] = "/history-old.csv";
@@ -30,11 +23,6 @@ constexpr uint8_t kI2cSclPin = 9;
 constexpr uint8_t kSht31Address = 0x44;
 
 Adafruit_SHT31 climateSensor = Adafruit_SHT31();
-
-uint32_t measurementIntervalMs =
-    kDefaultMeasurementIntervalMs;
-
-uint32_t bootId = 0;
 
 uint32_t lastMeasurementMs = 0;
 
@@ -52,13 +40,11 @@ float lastValidTemperatureC = 0.0F;
 float lastValidRelativeHumidityPercent = 0.0F;
 float lastValidDewPointC = 0.0F;
 
-bool isMeasurementIntervalValid(const uint32_t intervalMs) {
-    return intervalMs >= kMinimumMeasurementIntervalMs &&
-           intervalMs <= kMaximumMeasurementIntervalMs;
-}
-
 bool isMeasurementDue(const uint32_t nowMs) {
-    if (nowMs - lastMeasurementMs < measurementIntervalMs) {
+    if (
+        nowMs - lastMeasurementMs <
+        getMeasurementIntervalMs()
+    ) {
         return false;
     }
 
@@ -204,157 +190,6 @@ void printClimateMeasurement(
     );
 }
 
-void loadMeasurementInterval() {
-    Preferences preferences;
-
-    if (!preferences.begin(kPreferencesNamespace, false)) {
-        Serial.printf(
-            "TYTO_CONFIG uptime_ms=%lu"
-            " status=nvs_open_failed"
-            " measurement_interval_ms=%lu"
-            " source=default\n",
-            static_cast<unsigned long>(millis()),
-            static_cast<unsigned long>(
-                measurementIntervalMs
-            )
-        );
-
-        return;
-    }
-
-    const bool hasStoredInterval =
-        preferences.isKey(kMeasurementIntervalKey);
-
-    const char* source = "persisted";
-    const char* status = "ok";
-
-    if (hasStoredInterval) {
-        const uint32_t storedIntervalMs =
-            preferences.getUInt(
-                kMeasurementIntervalKey,
-                kDefaultMeasurementIntervalMs
-            );
-
-        if (isMeasurementIntervalValid(storedIntervalMs)) {
-            measurementIntervalMs = storedIntervalMs;
-        } else {
-            measurementIntervalMs =
-                kDefaultMeasurementIntervalMs;
-
-            source = "default";
-            status = "invalid_persisted_value";
-        }
-
-    } else {
-        const size_t bytesWritten =
-            preferences.putUInt(
-                kMeasurementIntervalKey,
-                kDefaultMeasurementIntervalMs
-            );
-
-        if (bytesWritten == sizeof(uint32_t)) {
-            source = "default_initialized";
-        } else {
-            source = "default";
-            status = "write_failed";
-        }
-    }
-
-    preferences.end();
-
-    Serial.printf(
-        "TYTO_CONFIG uptime_ms=%lu"
-        " status=%s"
-        " measurement_interval_ms=%lu"
-        " source=%s\n",
-        static_cast<unsigned long>(millis()),
-        status,
-        static_cast<unsigned long>(
-            measurementIntervalMs
-        ),
-        source
-    );
-}
-
-bool initializeBootId() {
-    Preferences preferences;
-
-    if (!preferences.begin(kPreferencesNamespace, false)) {
-        Serial.printf(
-            "TYTO_BOOT uptime_ms=%lu"
-            " status=nvs_open_failed\n",
-            static_cast<unsigned long>(millis())
-        );
-
-        return false;
-    }
-
-    const uint32_t previousBootId =
-        preferences.getUInt(kBootIdKey, 0);
-
-    const uint32_t nextBootId =
-        previousBootId + 1;
-
-    const size_t bytesWritten =
-        preferences.putUInt(
-            kBootIdKey,
-            nextBootId
-        );
-
-    preferences.end();
-
-    if (bytesWritten != sizeof(uint32_t)) {
-        Serial.printf(
-            "TYTO_BOOT uptime_ms=%lu"
-            " status=write_failed\n",
-            static_cast<unsigned long>(millis())
-        );
-
-        return false;
-    }
-
-    bootId = nextBootId;
-
-    Serial.printf(
-        "TYTO_BOOT uptime_ms=%lu"
-        " status=ready"
-        " boot_id=%lu\n",
-        static_cast<unsigned long>(millis()),
-        static_cast<unsigned long>(bootId)
-    );
-
-    return true;
-}
-
-bool saveMeasurementInterval(
-    const uint32_t intervalMs
-) {
-    if (!isMeasurementIntervalValid(intervalMs)) {
-        return false;
-    }
-
-    Preferences preferences;
-
-    if (!preferences.begin(kPreferencesNamespace, false)) {
-        return false;
-    }
-
-    const size_t bytesWritten =
-        preferences.putUInt(
-            kMeasurementIntervalKey,
-            intervalMs
-        );
-
-    preferences.end();
-
-    if (bytesWritten != sizeof(uint32_t)) {
-        return false;
-    }
-
-    measurementIntervalMs = intervalMs;
-    return true;
-}
-
 void printHistory(const char* historyFilePath) {
     if (!historyStorageAvailable) {
         Serial.printf(
@@ -480,10 +315,10 @@ void handleSerialCommand(const char* command) {
             " maximum_ms=%lu\n",
             static_cast<unsigned long>(millis()),
             static_cast<unsigned long>(
-                kMinimumMeasurementIntervalMs
+                getMinimumMeasurementIntervalMs()
             ),
             static_cast<unsigned long>(
-                kMaximumMeasurementIntervalMs
+                getMaximumMeasurementIntervalMs()
             )
         );
 
@@ -506,7 +341,7 @@ void handleSerialCommand(const char* command) {
         " measurement_interval_ms=%lu\n",
         static_cast<unsigned long>(millis()),
         static_cast<unsigned long>(
-            measurementIntervalMs
+            getMeasurementIntervalMs()
         )
     );
 }
@@ -734,7 +569,7 @@ bool appendHistoryMeasurement(
     if (hasTemperatureTrendChange) {
         historyFile.printf(
             "%lu,%lu,%.1f,%.1f,%.1f,%s,%.2f\n",
-            static_cast<unsigned long>(bootId),
+            static_cast<unsigned long>(getBootId()),
             static_cast<unsigned long>(uptimeMs),
             static_cast<double>(temperatureC),
             static_cast<double>(relativeHumidityPercent),
@@ -745,7 +580,7 @@ bool appendHistoryMeasurement(
     } else {
         historyFile.printf(
             "%lu,%lu,%.1f,%.1f,%.1f,%s,\n",
-            static_cast<unsigned long>(bootId),
+            static_cast<unsigned long>(getBootId()),
             static_cast<unsigned long>(uptimeMs),
             static_cast<double>(temperatureC),
             static_cast<double>(relativeHumidityPercent),
@@ -844,7 +679,9 @@ void setup() {
         static_cast<unsigned>(kSht31Address),
         static_cast<unsigned>(kI2cSdaPin),
         static_cast<unsigned>(kI2cSclPin),
-        static_cast<unsigned long>(measurementIntervalMs)
+        static_cast<unsigned long>(
+            getMeasurementIntervalMs()
+        )
     );
 }
 

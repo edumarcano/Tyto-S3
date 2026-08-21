@@ -19,6 +19,7 @@ print(data.head())
 data["temperature_f"] = data["temperature_c"] * 9 / 5 + 32
 data["dew_point_f"] = data["dew_point_c"] * 9 / 5 + 32
 
+# Build one continuous experiment timeline across ESP32 reboots.
 boot_ids = sorted(data["boot_id"].unique())
 
 elapsed_ms = []
@@ -32,6 +33,7 @@ for boot_id in boot_ids:
 
     elapsed_ms.extend(boot_elapsed)
 
+    # Continue the next boot after one expected 30-second sample interval.
     offset_ms = boot_elapsed.iloc[-1] + 30_000
 
 data["elapsed_hours"] = [value / 3_600_000 for value in elapsed_ms]
@@ -41,7 +43,7 @@ print(data[["boot_id", "uptime_ms", "elapsed_hours"]].head())
 print(data[["boot_id", "uptime_ms", "elapsed_hours"]].tail())
 
 # Temperature plots
-# Celcius
+# Celsius
 plt.figure(figsize=(10, 5))
 
 plt.plot(
@@ -93,13 +95,13 @@ plt.title("Room relative humidity over 72-hour experiment")
 
 plt.tight_layout()
 plt.savefig(
-    repo_root / "analysis/plots" / "relative_humidity.png",
+    repo_root / "analysis/plots" / "relative-humidity.png",
     dpi=150,
 )
 plt.show()
 
 # Dew point plots
-# Celcius
+# Celsius
 plt.figure(figsize=(10, 5))
 
 plt.plot(
@@ -113,7 +115,7 @@ plt.title("Room dew point over 72-hour experiment")
 
 plt.tight_layout()
 plt.savefig(
-    repo_root / "analysis/plots" / "dew_point.png",
+    repo_root / "analysis/plots" / "dew-point.png",
     dpi=150,
 )
 plt.show()
@@ -137,7 +139,7 @@ plt.savefig(
 )
 plt.show()
 
-
+# Combined climate plots
 fig, axes = plt.subplots(
     3,
     1,

@@ -8,4 +8,6 @@ Relative humidity follows a similar overall pattern.
 
 Dew point also follows the same larger pattern.
 
-There are also smaller repeated rises and drops throughout the dataset. These may be useful for later cycle detection, but the plots do not show what caused them.
+There are also smaller repeated rises and drops throughout the dataset. These were examined further in [Temperature cycle detection](temperature-cycle-detection.md).
+
+![Combined room climate plot](plots/room-climate-combined.png)

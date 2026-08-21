@@ -4,7 +4,7 @@
 
 ## v0.5.0 - Room-climate experiment
 
-**Unreleased**
+**Released:** August 21, 2026
 
 ### Added
 

@@ -14,7 +14,7 @@ Using the candidate rule from the cycle analysis, the dataset contained:
 
 The dataset also contains much slower changes, including the larger day and night pattern.
 
-## What we learned
+## What was learned
 
 Tyto can pick out repeated short room-climate cycles from stored temperature history with a simple offline rule.
 

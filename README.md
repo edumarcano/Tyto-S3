@@ -14,21 +14,21 @@ Tyto is designed to remain useful without cloud services or another application.
 
 ## Current Status
 
-The v0.5.0 room-climate experiment is complete and being prepared for release.
+Tyto has completed the v0.5.0 room-climate experiment.
 
-Tyto reads temperature and relative humidity from an SHT31 over I2C at a configurable interval. It validates each reading, calculates dew point, and tracks a short-term temperature trend.
+The device reads temperature and relative humidity from an SHT31 over I2C, calculates dew point and short-term temperature trends, stores validated measurements in LittleFS, and keeps the measurement interval in persistent configuration.
 
-The measurement interval can be changed over serial and is preserved across resets and power cycles.
+The 72-hour room dataset was exported and analyzed offline. The analysis found repeated short cooling and recovery cycles, with 91 complete candidate cycles using the current rule.
 
-Valid measurements are stored locally on the ESP32-S3 using LittleFS. Each history row includes the sensor readings, calculated climate values, a boot ID, and elapsed time. History can be inspected over serial and exported as CSV for analysis.
+These detected cycles describe room-temperature behavior only. The experiment did not record confirmed AC on/off times, so they should not be treated as confirmed AC activity.
 
 Tyto continues to operate as a standalone device without Wi-Fi, cloud services, or APEX.
 
-See [SHT31 Sensor Setup](docs/sht31-setup.md) for wiring, sensor behavior, and measurement configuration.
+See [SHT31 Sensor Setup](docs/sht31-setup.md) for wiring and sensor behavior.
 
-See [Climate History](docs/climate-history.md) for local storage, CSV format, history rotation, and export instructions.
+See [Climate History](docs/climate-history.md) for local storage and CSV export.
 
-See [Room Climate Experiment](docs/room-climate-experiment.md) for the v0.5.0 experiment setup and run record. The plots and analysis notes are in [`analysis/`](analysis/).
+See [Room Climate Experiment](docs/room-climate-experiment.md) and [Analysis](analysis/README.md) for the v0.5.0 experiment and results.
 
 ## Roadmap
 

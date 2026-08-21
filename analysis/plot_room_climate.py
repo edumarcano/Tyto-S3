@@ -175,3 +175,186 @@ plt.savefig(
 )
 
 plt.show()
+
+window = data[
+    (data["elapsed_hours"] >= 0)
+    & (data["elapsed_hours"] <= 72)
+]
+
+plt.figure(figsize=(12, 5))
+
+plt.plot(
+    window["elapsed_hours"],
+    window["temperature_c"],
+)
+
+plt.xlabel("Experiment time (hours)")
+plt.ylabel("Temperature (°C)")
+plt.title("Temperature detail: hours 0–72")
+
+plt.tight_layout()
+plt.show()
+
+temperatures = window["temperature_c"].reset_index(drop=True)
+times = window["elapsed_hours"].reset_index(drop=True)
+
+# Ignore small reversals so sensor noise does not create extra turning points.
+reversal_threshold_c = 0.4
+
+turning_points = []
+
+trend = None
+minimum_index = 0
+maximum_index = 0
+extreme_index = 0
+
+# Track whether temperature is currently rising or falling and record
+# a turning point once the direction reverses by the threshold amount.
+for index in range(1, len(temperatures)):
+    current = temperatures.iloc[index]
+
+    if trend is None:
+        if current < temperatures.iloc[minimum_index]:
+            minimum_index = index
+
+        if current > temperatures.iloc[maximum_index]:
+            maximum_index = index
+
+        if (
+            temperatures.iloc[maximum_index]
+            - temperatures.iloc[minimum_index]
+            >= reversal_threshold_c
+        ):
+            if minimum_index < maximum_index:
+                turning_points.append(
+                    (
+                        "trough",
+                        times.iloc[minimum_index],
+                        temperatures.iloc[minimum_index],
+                    )
+                )
+                trend = "rising"
+                extreme_index = maximum_index
+            else:
+                turning_points.append(
+                    (
+                        "peak",
+                        times.iloc[maximum_index],
+                        temperatures.iloc[maximum_index],
+                    )
+                )
+                trend = "falling"
+                extreme_index = minimum_index
+
+    elif trend == "rising":
+        if current > temperatures.iloc[extreme_index]:
+            extreme_index = index
+
+        elif (
+            temperatures.iloc[extreme_index] - current
+            >= reversal_threshold_c
+        ):
+            turning_points.append(
+                (
+                    "peak",
+                    times.iloc[extreme_index],
+                    temperatures.iloc[extreme_index],
+                )
+            )
+            trend = "falling"
+            extreme_index = index
+
+    elif trend == "falling":
+        if current < temperatures.iloc[extreme_index]:
+            extreme_index = index
+
+        elif (
+            current - temperatures.iloc[extreme_index]
+            >= reversal_threshold_c
+        ):
+            turning_points.append(
+                (
+                    "trough",
+                    times.iloc[extreme_index],
+                    temperatures.iloc[extreme_index],
+                )
+            )
+            trend = "rising"
+            extreme_index = index
+
+for kind, time_hours, temperature_c in turning_points:
+    print(
+        f"{kind:6} "
+        f"time={time_hours:.3f} h "
+        f"temperature={temperature_c:.2f} °C"
+    )
+
+    print()
+
+candidate_cooling_count = 0
+candidate_recovery_count = 0
+candidate_legs = []
+
+for first, second in zip(turning_points, turning_points[1:]):
+    first_kind, first_time, first_temperature = first
+    second_kind, second_time, second_temperature = second
+
+    duration_minutes = (second_time - first_time) * 60
+    temperature_change_c = second_temperature - first_temperature
+
+    if first_kind == "peak" and second_kind == "trough":
+        is_candidate = (
+            abs(temperature_change_c) >= 0.7
+            and duration_minutes <= 30
+        )
+
+        if is_candidate:
+            candidate_cooling_count += 1
+            candidate_legs.append("cooling")
+        else:
+            candidate_legs.append(None)
+
+        print(
+            f"cooling  "
+            f"duration={duration_minutes:.1f} min "
+            f"change={temperature_change_c:.2f} °C"
+        )
+
+    elif first_kind == "trough" and second_kind == "peak":
+        is_candidate = (
+            temperature_change_c >= 0.7
+            and duration_minutes <= 30
+        )
+
+        if is_candidate:
+            candidate_recovery_count += 1
+            candidate_legs.append("recovery")
+        else:
+            candidate_legs.append(None)
+
+        print(
+            f"recovery "
+            f"duration={duration_minutes:.1f} min "
+            f"change=+{temperature_change_c:.2f} °C"
+        )
+
+print()
+print(f"Candidate cooling periods: {candidate_cooling_count}")
+print(f"Candidate recovery periods: {candidate_recovery_count}")
+
+complete_candidate_cycles = 0
+
+for first_leg, second_leg in zip(
+    candidate_legs,
+    candidate_legs[1:],
+):
+    if (
+        first_leg == "cooling"
+        and second_leg == "recovery"
+    ):
+        complete_candidate_cycles += 1
+
+print(
+    f"Complete candidate cycles: "
+    f"{complete_candidate_cycles}"
+)

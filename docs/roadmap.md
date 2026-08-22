@@ -57,18 +57,23 @@ Tyto is developed in small stages. Each release should leave the device working 
 
 ## v0.6.0 - Reliability and local interface
 
-- Report reset reasons and useful error counters
+- Report reset reasons and useful sensor error counters
+- Recover automatically after temporary sensor disconnection
 - Extend testing of sensor failure and recovery behavior
-- Complete an extended unattended run
-- Add one simple local status or configuration interface
+- Use the board LED as a simple local health indicator
+- Complete a six-day unattended run
+- Document resets, errors, recoveries, and data gaps
 - Keep local sensing independent of later network features
 
 ## v0.7.0 - External device interface
 
-- Define a versioned telemetry format
-- Include measurements, calculated state, device health, and firmware version
-- Handle temporary network and receiver outages
-- Add authentication for external telemetry
+- Define a versioned interface for external software
+- Include measurements, calculated state, device health, firmware version, and diagnostics
+- Build a simple CLI for status and monitoring
+- Define compatibility and error-handling behavior
+- Prepare the interface for later network transport
+- Handle temporary communication and receiver outages
+- Add authentication when external network telemetry is introduced
 - Keep all core features working while disconnected
 - Document the interface and compatibility rules
 
